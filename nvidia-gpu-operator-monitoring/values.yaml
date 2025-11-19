@@ -6,13 +6,39 @@
 vectorAddChecker:
   # Enable or disable the vector-add-checker
   enabled: true
-  # Container image repository for CUDA samples
-  repository: "docker.io/nvidia"
+  
+  # Container image configuration
+  image:
+    # Container image repository
+    repository: "ghcr.io/lukas-holzner/nvidia-gpu-operator-monitoring/cuda-vector-add"
+    # Image pull policy
+    pullPolicy: IfNotPresent
+    # Image tag (overrides the appVersion in Chart.yaml)
+    tag: "cuda-12.6.2"
+  
+  # CronJob schedule (every 10 minutes by default)
+  schedule: "*/10 * * * *"
+  
   # Alert severity level (warning, critical, etc.)
   severity: "warning"
+  
+  # PrometheusRule configuration
+  alert:
+    # Time threshold in minutes for last successful job (default: 12 minutes)
+    timeThreshold: 12
+    # Duration the alert condition must persist before firing (default: 30m)
+    for: "30m"
+    # Additional alert labels
+    labels: {}
+    # Additional alert annotations
+    annotations: {}
 
 # Use case identifier for cluster
 usecase: "example"
 
 # Cluster environment (dev, staging, prod, etc.)
 clusterEnvironment: "dev"
+
+# Namespace where the CronJob metrics are monitored
+# This should match where the CronJob is deployed
+namespace: "nvidia-gpu-operator"

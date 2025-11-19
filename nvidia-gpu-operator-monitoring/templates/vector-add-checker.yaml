@@ -3,40 +3,66 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: vector-add-checker
+  name: {{ include "nvidia-gpu-operator-monitoring.fullname" . }}-vector-add-checker
+  labels:
+    {{- include "nvidia-gpu-operator-monitoring.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gpu-checker
 spec:
-  schedule: "*/10 * * * *"
+  schedule: {{ .Values.vectorAddChecker.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
   jobTemplate:
+    metadata:
+      labels:
+        {{- include "nvidia-gpu-operator-monitoring.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: gpu-checker
     spec:
       template:
+        metadata:
+          labels:
+            {{- include "nvidia-gpu-operator-monitoring.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: gpu-checker
         spec:
+          restartPolicy: Never
           containers:
           - name: vector-add-checker
-            image: {{ .Values.vectorAddChecker.repository }}/cuda-sample:vectoradd-cuda12.5.0
-            imagePullPolicy: IfNotPresent
-          restartPolicy: Never
+            image: "{{ .Values.vectorAddChecker.image.repository }}:{{ .Values.vectorAddChecker.image.tag | default .Chart.AppVersion }}"
+            imagePullPolicy: {{ .Values.vectorAddChecker.image.pullPolicy }}
+            resources:
+              limits:
+                nvidia.com/gpu: 1
+              requests:
+                nvidia.com/gpu: 1
           nodeSelector:
             nvidia.com/gpu.present: 'true'
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
+  name: {{ include "nvidia-gpu-operator-monitoring.fullname" . }}-gpu-rules
   labels:
+    {{- include "nvidia-gpu-operator-monitoring.labels" . | nindent 4 }}
     role: alert-rules
-  name: gpu-rules
 spec:
   groups:
-      - name: GPUNodesUnavailable
-        rules:
-          - alert: GPUNodesUnavailable
-            expr: (time() - floor(kube_cronjob_status_last_successful_time{cronjob="vector-add-checker",namespace="nvidia-gpu-operator"}))/60 > 12
-            for: 30m
-            labels:
-              severity: {{ .Values.vectorAddChecker.severity | default "warning" }}
-              owner: _DPT_Squad_DevOpsPlatformExcellence@interhyp.de
-              service: "nvidia-gpu-operator"
-              aod: "1"
-            annotations:
-              summary: Unable to run jobs on the GPU in namespace nvidia-gpu-operator
-              description: "Unable to run jobs on the GPU for 30 Minutes in namespace nvidia-gpu-operator on cluster {{ .Values.usecase }}-{{ .Values.clusterEnvironment }}"
-{{ end }}
+    - name: GPUNodesUnavailable
+      rules:
+        - alert: GPUNodesUnavailable
+          expr: (time() - floor(kube_cronjob_status_last_successful_time{cronjob="{{ include "nvidia-gpu-operator-monitoring.fullname" . }}-vector-add-checker",namespace="{{ .Values.namespace }}"})) / 60 > {{ .Values.vectorAddChecker.alert.timeThreshold }}
+          for: {{ .Values.vectorAddChecker.alert.for }}
+          labels:
+            severity: {{ .Values.vectorAddChecker.severity | quote }}
+            owner: _DPT_Squad_DevOpsPlatformExcellence@interhyp.de
+            service: {{ include "nvidia-gpu-operator-monitoring.name" . | quote }}
+            aod: "1"
+            {{- with .Values.vectorAddChecker.alert.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: Unable to run jobs on the GPU in namespace {{ .Values.namespace }}
+            description: "Unable to run jobs on the GPU for {{ .Values.vectorAddChecker.alert.for }} in namespace {{ .Values.namespace }} on cluster {{ .Values.usecase }}-{{ .Values.clusterEnvironment }}"
+            {{- with .Values.vectorAddChecker.alert.annotations }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+{{- end }}

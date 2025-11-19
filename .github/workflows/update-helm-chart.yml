@@ -1,0 +1,64 @@
+name: Update Helm Chart on CUDA Version Change
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'docker/Dockerfile'
+
+jobs:
+  update-helm-chart:
+    runs-on: ubuntu-latest
+    if: startsWith(github.head_ref, 'dependabot/docker')
+    
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract CUDA version from Dockerfile
+        id: cuda-version
+        run: |
+          CUDA_VERSION=$(grep -oP 'FROM nvidia/cuda:\K[0-9]+\.[0-9]+\.[0-9]+' docker/Dockerfile | head -1)
+          echo "version=${CUDA_VERSION}" >> $GITHUB_OUTPUT
+          echo "CUDA version detected: ${CUDA_VERSION}"
+
+      - name: Update Helm Chart appVersion
+        run: |
+          CUDA_VERSION="${{ steps.cuda-version.outputs.version }}"
+          sed -i "s/^appVersion: .*/appVersion: \"cuda-${CUDA_VERSION}\"/" nvidia-gpu-operator-monitoring/Chart.yaml
+          
+      - name: Update Helm Chart version (patch bump)
+        run: |
+          CURRENT_VERSION=$(grep '^version:' nvidia-gpu-operator-monitoring/Chart.yaml | sed 's/version: //' | tr -d '"')
+          # Simple patch version bump
+          MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+          MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+          PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          sed -i "s/^version: .*/version: ${NEW_VERSION}/" nvidia-gpu-operator-monitoring/Chart.yaml
+          echo "Updated chart version from ${CURRENT_VERSION} to ${NEW_VERSION}"
+
+      - name: Update default image tag in values.yaml
+        run: |
+          CUDA_VERSION="${{ steps.cuda-version.outputs.version }}"
+          sed -i "s/tag: .*/tag: \"cuda-${CUDA_VERSION}\"/" nvidia-gpu-operator-monitoring/values.yaml
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add nvidia-gpu-operator-monitoring/Chart.yaml nvidia-gpu-operator-monitoring/values.yaml
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore(helm): update chart for CUDA ${{ steps.cuda-version.outputs.version }}"
+            git push
+          fi

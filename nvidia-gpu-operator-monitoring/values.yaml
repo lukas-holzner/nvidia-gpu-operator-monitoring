@@ -1,0 +1,18 @@
+# Default values for nvidia-gpu-operator-monitoring.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Configuration for the vector-add-checker CronJob and PrometheusRule
+vectorAddChecker:
+  # Enable or disable the vector-add-checker
+  enabled: true
+  # Container image repository for CUDA samples
+  repository: "docker.io/nvidia"
+  # Alert severity level (warning, critical, etc.)
+  severity: "warning"
+
+# Use case identifier for cluster
+usecase: "example"
+
+# Cluster environment (dev, staging, prod, etc.)
+clusterEnvironment: "dev"

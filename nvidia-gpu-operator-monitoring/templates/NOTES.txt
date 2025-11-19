@@ -1,0 +1,30 @@
+NVIDIA GPU Operator Monitoring has been installed!
+
+{{- if .Values.vectorAddChecker.enabled }}
+
+The vector-add-checker CronJob has been deployed and will run every 10 minutes.
+
+To check the status of the CronJob:
+  kubectl get cronjob vector-add-checker -n {{ .Release.Namespace }}
+
+To view recent jobs:
+  kubectl get jobs -n {{ .Release.Namespace }} -l job-name=vector-add-checker
+
+To check the PrometheusRule:
+  kubectl get prometheusrule gpu-rules -n {{ .Release.Namespace }}
+
+The alert "GPUNodesUnavailable" will fire if:
+  - No successful GPU jobs have completed in the last 12 minutes
+  - This condition persists for 30 minutes
+
+Alert details:
+  - Severity: {{ .Values.vectorAddChecker.severity | default "warning" }}
+  - Cluster: {{ .Values.usecase }}-{{ .Values.clusterEnvironment }}
+
+{{- else }}
+
+The vector-add-checker is currently disabled.
+To enable it, set vectorAddChecker.enabled=true in your values.yaml
+
+{{- end }}
+

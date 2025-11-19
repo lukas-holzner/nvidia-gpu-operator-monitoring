@@ -1,0 +1,42 @@
+{{- if .Values.vectorAddChecker.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vector-add-checker
+spec:
+  schedule: "*/10 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: vector-add-checker
+            image: {{ .Values.vectorAddChecker.repository }}/cuda-sample:vectoradd-cuda12.5.0
+            imagePullPolicy: IfNotPresent
+          restartPolicy: Never
+          nodeSelector:
+            nvidia.com/gpu.present: 'true'
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    role: alert-rules
+  name: gpu-rules
+spec:
+  groups:
+      - name: GPUNodesUnavailable
+        rules:
+          - alert: GPUNodesUnavailable
+            expr: (time() - floor(kube_cronjob_status_last_successful_time{cronjob="vector-add-checker",namespace="nvidia-gpu-operator"}))/60 > 12
+            for: 30m
+            labels:
+              severity: {{ .Values.vectorAddChecker.severity | default "warning" }}
+              owner: _DPT_Squad_DevOpsPlatformExcellence@interhyp.de
+              service: "nvidia-gpu-operator"
+              aod: "1"
+            annotations:
+              summary: Unable to run jobs on the GPU in namespace nvidia-gpu-operator
+              description: "Unable to run jobs on the GPU for 30 Minutes in namespace nvidia-gpu-operator on cluster {{ .Values.usecase }}-{{ .Values.clusterEnvironment }}"
+{{ end }}
